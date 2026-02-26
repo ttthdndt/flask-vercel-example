@@ -1,7 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, Response
 import requests
 import random
 import string
+import json
 
 app = Flask(__name__)
 
@@ -10,6 +11,16 @@ BASE = "https://api.mail.tm"
 
 def random_username(length=12):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def download_json(data: dict, filename: str = "result.json"):
+    """Trả về response JSON kèm header tự động download file."""
+    return Response(
+        response=json.dumps(data, ensure_ascii=False, indent=2),
+        status=200,
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 HTML = """<!DOCTYPE html>
@@ -36,13 +47,15 @@ HTML = """<!DOCTYPE html>
     button:hover{opacity:.85}
     button:disabled{opacity:.45;cursor:not-allowed}
     pre{background:#0f0f1a;border:1px solid #2d2d5e;border-radius:8px;padding:14px;font-size:.83rem;color:#d1d5db;white-space:pre-wrap;word-break:break-all;min-height:54px;margin-top:12px}
-    .lbl{font-size:.8rem;color:#6b7280;margin-bottom:6px;display:block}
+    .lbl{font-size:.8rem;color:#6b7280;margin:8px 0 6px;display:block}
+    .dl-btn{display:none;width:100%;margin-top:10px;padding:10px;background:linear-gradient(135deg,#065f46,#0d9488);color:#fff;border:none;border-radius:9px;font-size:.9rem;cursor:pointer;font-weight:600}
+    .dl-btn:hover{opacity:.85}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>✉️ Create Mail API</h1>
-  <p class="sub">Tạo email tạm thời — trả về <code>email</code> và <code>password</code></p>
+  <p class="sub">Tạo email tạm thời — trả về file <code>create-mail-result.json</code></p>
 
   <div class="card">
     <h2>🔌 Endpoint</h2>
@@ -58,25 +71,33 @@ HTML = """<!DOCTYPE html>
 
   <div class="card">
     <h2>🧪 Thử ngay</h2>
-    <button id="btn" onclick="run()">⚡ Tạo Email mới</button>
-    <span class="lbl" id="lbl" style="margin-top:10px"></span>
+    <button id="btn" onclick="run()">⚡ Tạo Email & Download JSON</button>
+    <span class="lbl" id="lbl"></span>
     <pre id="out">// Kết quả hiển thị ở đây...</pre>
+    <a id="dlLink" style="display:none"><button class="dl-btn" id="dlBtn">⬇️ Download create-mail-result.json</button></a>
   </div>
 
   <div class="card">
     <h2>💡 Ví dụ gọi API</h2>
-    <pre># cURL
-curl "https://your-create-mail-app.vercel.app/api/create-mail"
+    <pre># cURL — tự download file
+curl -OJ "https://your-app.vercel.app/api/create-mail"
 
 # Python
 import requests
-r = requests.get("https://your-create-mail-app.vercel.app/api/create-mail")
+r = requests.get("https://your-app.vercel.app/api/create-mail")
+# Đọc JSON trực tiếp
 data = r.json()
 print(data["email"], data["password"])
+# Hoặc lưu file
+with open("create-mail-result.json", "wb") as f:
+    f.write(r.content)
 
 # JavaScript
 const res = await fetch("/api/create-mail");
-const { email, password } = await res.json();</pre>
+const blob = await res.blob();
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url; a.download = "create-mail-result.json"; a.click();</pre>
   </div>
 </div>
 <script>
@@ -86,11 +107,23 @@ const { email, password } = await res.json();</pre>
     const lbl = document.getElementById('lbl');
     btn.disabled = true;
     lbl.textContent = '⏳ Đang tạo...';
+
     try {
       const res = await fetch('/api/create-mail');
-      const data = await res.json();
+      const blob = await res.blob();
+      const text = await blob.text();
+      const data = JSON.parse(text);
+
       lbl.textContent = data.success ? '✅ Tạo thành công!' : '❌ Thất bại';
       out.textContent = JSON.stringify(data, null, 2);
+
+      // Tạo link download
+      const url = URL.createObjectURL(blob);
+      const link = document.getElementById('dlLink');
+      link.href = url;
+      link.download = 'create-mail-result.json';
+      link.style.display = 'block';
+      document.getElementById('dlBtn').style.display = 'block';
     } catch(e) {
       lbl.textContent = '❌ Lỗi kết nối';
       out.textContent = e.message;
@@ -110,13 +143,14 @@ def index():
 @app.route('/api/create-mail', methods=['GET'])
 def create_mail():
     """
-    Tạo một tài khoản email tạm thời trên mail.tm.
+    Tạo email tạm thời trên mail.tm.
+    Response: file JSON tự động download (Content-Disposition: attachment)
 
-    Response JSON:
+    Fields trả về:
       success  : bool
-      email    : string — địa chỉ email
-      password : string — mật khẩu
-      error    : string — chỉ có khi thất bại
+      email    : string
+      password : string
+      error    : string (chỉ khi thất bại)
     """
     try:
         # 1. Lấy domain khả dụng
@@ -135,22 +169,22 @@ def create_mail():
         }, timeout=10)
 
         if acc_res.status_code not in (200, 201):
-            return jsonify({
+            return download_json({
                 "success": False,
                 "error": f"Tạo tài khoản thất bại ({acc_res.status_code}): {acc_res.text}"
-            }), 400
+            }, "create-mail-error.json")
 
-        return jsonify({
+        return download_json({
             "success":  True,
             "email":    address,
             "password": password
-        })
+        }, "create-mail-result.json")
 
     except Exception as e:
-        return jsonify({
+        return download_json({
             "success": False,
             "error":   str(e)
-        }), 500
+        }, "create-mail-error.json")
 
 
 if __name__ == '__main__':
