@@ -2,7 +2,6 @@ from flask import Flask, Response
 import requests
 import random
 import string
-import json
 
 app = Flask(__name__)
 
@@ -13,12 +12,12 @@ def random_username(length=12):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def download_json(data: dict, filename: str = "result.json"):
-    """Trả về response JSON kèm header tự động download file."""
+def download_txt(content: str, filename: str = "result.txt"):
+    """Trả về file .txt với header tự động download."""
     return Response(
-        response=json.dumps(data, ensure_ascii=False, indent=2),
+        response=content,
         status=200,
-        mimetype="application/json",
+        mimetype="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
@@ -46,7 +45,7 @@ HTML = """<!DOCTYPE html>
     button{width:100%;padding:13px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:9px;font-size:.95rem;cursor:pointer;font-weight:600;transition:opacity .2s}
     button:hover{opacity:.85}
     button:disabled{opacity:.45;cursor:not-allowed}
-    pre{background:#0f0f1a;border:1px solid #2d2d5e;border-radius:8px;padding:14px;font-size:.83rem;color:#d1d5db;white-space:pre-wrap;word-break:break-all;min-height:54px;margin-top:12px}
+    pre{background:#0f0f1a;border:1px solid #2d2d5e;border-radius:8px;padding:14px;font-size:.83rem;color:#d1d5db;white-space:pre-wrap;min-height:54px;margin-top:12px}
     .lbl{font-size:.8rem;color:#6b7280;margin:8px 0 6px;display:block}
     .dl-btn{display:none;width:100%;margin-top:10px;padding:10px;background:linear-gradient(135deg,#065f46,#0d9488);color:#fff;border:none;border-radius:9px;font-size:.9rem;cursor:pointer;font-weight:600}
     .dl-btn:hover{opacity:.85}
@@ -55,49 +54,38 @@ HTML = """<!DOCTYPE html>
 <body>
 <div class="wrap">
   <h1>✉️ Create Mail API</h1>
-  <p class="sub">Tạo email tạm thời — trả về file <code>create-mail-result.json</code></p>
+  <p class="sub">Tạo email tạm thời — download <code>create-mail.txt</code> chứa <code>email|password</code></p>
 
   <div class="card">
     <h2>🔌 Endpoint</h2>
     <div class="ep"><span class="badge">GET</span>/api/create-mail</div>
     <table>
-      <tr><th>Field</th><th>Kiểu</th><th>Mô tả</th></tr>
-      <tr><td>success</td><td>bool</td><td>true nếu tạo thành công</td></tr>
-      <tr><td>email</td><td>string</td><td>Địa chỉ email vừa tạo</td></tr>
-      <tr><td>password</td><td>string</td><td>Mật khẩu tài khoản</td></tr>
-      <tr><td>error</td><td>string</td><td>Thông báo lỗi (nếu có)</td></tr>
+      <tr><th>Nội dung file .txt</th><th>Mô tả</th></tr>
+      <tr><td>email|password</td><td>Thành công — ví dụ: <code>abc123@mail.tm|Pass1234!</code></td></tr>
+      <tr><td>error|message</td><td>Thất bại — ví dụ: <code>error|Timeout</code></td></tr>
     </table>
   </div>
 
   <div class="card">
     <h2>🧪 Thử ngay</h2>
-    <button id="btn" onclick="run()">⚡ Tạo Email & Download JSON</button>
+    <button id="btn" onclick="run()">⚡ Tạo Email & Download TXT</button>
     <span class="lbl" id="lbl"></span>
-    <pre id="out">// Kết quả hiển thị ở đây...</pre>
-    <a id="dlLink" style="display:none"><button class="dl-btn" id="dlBtn">⬇️ Download create-mail-result.json</button></a>
+    <pre id="out">// Nội dung file sẽ hiển thị ở đây...</pre>
+    <a id="dlLink" style="display:none"><button class="dl-btn" id="dlBtn">⬇️ Download create-mail.txt</button></a>
   </div>
 
   <div class="card">
     <h2>💡 Ví dụ gọi API</h2>
     <pre># cURL — tự download file
 curl -OJ "https://your-app.vercel.app/api/create-mail"
+# → lưu file: create-mail.txt
+# → nội dung: abc123@mail.tm|Pass1234!
 
 # Python
 import requests
 r = requests.get("https://your-app.vercel.app/api/create-mail")
-# Đọc JSON trực tiếp
-data = r.json()
-print(data["email"], data["password"])
-# Hoặc lưu file
-with open("create-mail-result.json", "wb") as f:
-    f.write(r.content)
-
-# JavaScript
-const res = await fetch("/api/create-mail");
-const blob = await res.blob();
-const url = URL.createObjectURL(blob);
-const a = document.createElement("a");
-a.href = url; a.download = "create-mail-result.json"; a.click();</pre>
+email, password = r.text.strip().split("|")
+print(email, password)</pre>
   </div>
 </div>
 <script>
@@ -112,16 +100,15 @@ a.href = url; a.download = "create-mail-result.json"; a.click();</pre>
       const res = await fetch('/api/create-mail');
       const blob = await res.blob();
       const text = await blob.text();
-      const data = JSON.parse(text);
 
-      lbl.textContent = data.success ? '✅ Tạo thành công!' : '❌ Thất bại';
-      out.textContent = JSON.stringify(data, null, 2);
+      const ok = !text.startsWith('error|');
+      lbl.textContent = ok ? '✅ Tạo thành công!' : '❌ Thất bại';
+      out.textContent = text;
 
-      // Tạo link download
       const url = URL.createObjectURL(blob);
       const link = document.getElementById('dlLink');
       link.href = url;
-      link.download = 'create-mail-result.json';
+      link.download = 'create-mail.txt';
       link.style.display = 'block';
       document.getElementById('dlBtn').style.display = 'block';
     } catch(e) {
@@ -144,13 +131,10 @@ def index():
 def create_mail():
     """
     Tạo email tạm thời trên mail.tm.
-    Response: file JSON tự động download (Content-Disposition: attachment)
 
-    Fields trả về:
-      success  : bool
-      email    : string
-      password : string
-      error    : string (chỉ khi thất bại)
+    Response: file create-mail.txt (Content-Disposition: attachment)
+      Thành công : email|password
+      Thất bại   : error|<message>
     """
     try:
         # 1. Lấy domain khả dụng
@@ -169,22 +153,15 @@ def create_mail():
         }, timeout=10)
 
         if acc_res.status_code not in (200, 201):
-            return download_json({
-                "success": False,
-                "error": f"Tạo tài khoản thất bại ({acc_res.status_code}): {acc_res.text}"
-            }, "create-mail-error.json")
+            return download_txt(
+                f"error|Tạo tài khoản thất bại ({acc_res.status_code})",
+                "create-mail.txt"
+            )
 
-        return download_json({
-            "success":  True,
-            "email":    address,
-            "password": password
-        }, "create-mail-result.json")
+        return download_txt(f"{address}|{password}", "create-mail.txt")
 
     except Exception as e:
-        return download_json({
-            "success": False,
-            "error":   str(e)
-        }, "create-mail-error.json")
+        return download_txt(f"error|{str(e)}", "create-mail.txt")
 
 
 if __name__ == '__main__':
