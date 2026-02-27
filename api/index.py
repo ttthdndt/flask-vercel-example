@@ -77,13 +77,13 @@ HTML = """<!DOCTYPE html>
   <div class="card">
     <h2>💡 Ví dụ gọi API</h2>
     <pre># cURL — tự download file
-curl -OJ "https://your-app.vercel.app/api/create-mail"
+curl -OJ "https://flask-vercel-example-ruby.vercel.app/api/create-mail"
 # → lưu file: create-mail.txt
 # → nội dung: abc123@mail.tm|Pass1234!
 
 # Python
 import requests
-r = requests.get("https://your-app.vercel.app/api/create-mail")
+r = requests.get("https://flask-vercel-example-ruby.vercel.app/api/create-mail")
 email, password = r.text.strip().split("|")
 print(email, password)</pre>
   </div>
